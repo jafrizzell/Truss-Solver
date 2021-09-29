@@ -86,7 +86,7 @@ class Structure:
                 member_force = round(member.ea/member.l * np.dot(member_mat, du), 5)
             else:
                 du = [disp_copy[member.nx-1], disp_copy[member.fx-1]]
-                member_force = member.ea * (du[1] - du[0])
+                member_force = member.ea / member.l * (du[1] - du[0])
             print('Force in member #', mem_num, 'is', member_force, '\n')
             mem_num += 1
 
