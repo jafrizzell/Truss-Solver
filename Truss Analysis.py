@@ -7,7 +7,7 @@ class Structure:
         self.matrix = np.zeros((dof, dof))
         self.forces = []
         self.displacements = []
-        self.members =  []
+        self.members = []
 
     def add_member(self, member):
         self.members.append(member)
@@ -16,10 +16,9 @@ class Structure:
                 row = member.dof[i]
                 col = member.dof[j]
                 self.matrix[row-1][col-1] += round(member.ea*member.k_matrix[i][j]/member.l, 5)
-        print(member.ea*np.asarray(member.k_matrix[0])/member.l, member.nx)
-        print(member.ea*np.asarray(member.k_matrix[1])/member.l, member.ny)
-        print(member.ea*np.asarray(member.k_matrix[2])/member.l, member.fx)
-        print(member.ea*np.asarray(member.k_matrix[3])/member.l, member.fy)
+
+        for row in range(len(member.k_matrix)):
+            print(member.ea*np.asarray(member.k_matrix[row])/member.l, member.dof[row])
         print('')
 
     def solve(self):
@@ -43,7 +42,6 @@ class Structure:
             count += 1
 
         print(np.asarray(self.matrix))
-        print(self.forces)
         k11 = self.matrix[:num_unknown, :num_unknown]
         k12 = self.matrix[:num_unknown, -num_known:]
         k21 = self.matrix[num_unknown:, :num_unknown]
@@ -77,18 +75,48 @@ class Structure:
 
         print('Displacement =', du, 'on directions', dof_unknown, '\n')
         print("System Displacements:", disp_copy, '\n')
-        print("System Forces:", qu, '\n')
+        print("Nodal Reactions:", qu, '\n')
 
         mem_num = 1
+        print("Member internal forces (positive is compression, negative is tension)\n")
         for member in self.members:
-            du = [disp_copy[member.nx-1], disp_copy[member.ny-1], disp_copy[member.fx-1], disp_copy[member.fy-1]]
-            member_mat = [member.lam_x, member.lam_y, -member.lam_x, -member.lam_y]
-            member_force = round(member.ea/member.l * np.dot(member_mat, du), 5)
+            if len(member.k_matrix) == 4:
+                du = [disp_copy[member.nx-1], disp_copy[member.ny-1], disp_copy[member.fx-1], disp_copy[member.fy-1]]
+                member_mat = [member.lam_x, member.lam_y, -member.lam_x, -member.lam_y]
+                member_force = round(member.ea/member.l * np.dot(member_mat, du), 5)
+            else:
+                du = [disp_copy[member.nx-1], disp_copy[member.fx-1]]
+                member_force = member.ea * (du[1] - du[0])
             print('Force in member #', mem_num, 'is', member_force, '\n')
             mem_num += 1
 
 
 class Member:
+    class Spring:
+        def __init__(self):
+            self.nx = 0
+            self.fx = 0
+            self.ea = 0
+            self.l = 0
+            self.lam_x = 0
+            self.lam_y = 0
+            self.k_matrix = np.zeros((2,2))
+            self.dof = [0, 0]
+
+        def define(self, nx, fx, k, l, lam_x, lam_y):
+            self.nx = nx
+            self.fx = fx
+            self.ea = k
+            self.l = l
+            self.lam_x = lam_x
+            self.lam_y = lam_y
+            self.dof = [nx, fx]
+
+            self.k_matrix = [
+                [1, -1],
+                [-1, 1]
+            ]
+
     class Truss:
         def __init__(self):
             self.nx = 0
@@ -134,7 +162,7 @@ class Member:
             self.k_matrix = np.zeros((4, 4))
             self.dof = [0, 0, 0, 0]
 
-        def define(self, nx, ny, fx, fy, ea, l):
+        def define(self, nx, ny, fx, fy, ea, l, lam_x, lam_y):
             self.nx = nx
             self.ny = ny
             self.fx = fx
@@ -155,24 +183,25 @@ dof = 8
 structure = Structure(dof)
 
 t1 = Member.Truss()
-t1.define(5, 6, 1, 2, 1000000*1, 240, 1, 0)
+t1.define(5, 6, 1, 2, 1 * 1*10**6, 20*12, 1, 0)
 structure.add_member(t1)
 t2 = Member.Truss()
-t2.define(5, 6, 3, 4, 1000000*1, 300, 0.8, 0.6)
+t2.define(5, 6, 3, 4, 1 * 1*10**6, 300, 0.8, 0.6)
 structure.add_member(t2)
 t3 = Member.Truss()
-t3.define(1, 2, 7, 8, 1000000*1, 300, -0.8, 0.6)
+t3.define(1, 2, 7, 8, 1 * 1*10**6, 300, -0.8, 0.6)
 structure.add_member(t3)
 t4 = Member.Truss()
-t4.define(1, 2, 3, 4, 1000000*1, 180, 0, 1)
+t4.define(1, 2, 3, 4, 1 * 1*10**6, 15*12, 0, 1)
 structure.add_member(t4)
 t5 = Member.Truss()
-t5.define(7, 8, 3, 4, 1000000*1, 240, 1, 0)
+t5.define(7, 8, 3, 4, 1 * 1*10**6, 20*12, 1, 0)
 structure.add_member(t5)
 t6 = Member.Truss()
-t6.define(5, 6, 7, 8, 1000000*1, 180, 0, 1)
+t6.define(5, 6, 7, 8, 1 * 1*10**6, 15*12, 0, 1)
 structure.add_member(t6)
 
 structure.forces = [0, 1000, 0, 1000, 'f', 'f', 'f', 'f']
 structure.displacements = ['f', 'f', 'f', 'f', 0, 0, 0, 0]
+
 structure.solve()
