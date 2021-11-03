@@ -11,15 +11,24 @@ class Structure:
 
     def add_member(self, member):
         self.members.append(member)
-        for i in range(len(member.k_matrix)):
-            for j in range(len(member.k_matrix[i])):
-                row = member.dof[i]
-                col = member.dof[j]
-                self.matrix[row-1][col-1] += round(member.ea*member.k_matrix[i][j]/member.l, 5)
-
-        for row in range(len(member.k_matrix)):
-            print(member.ea*np.asarray(member.k_matrix[row])/member.l, member.dof[row])
-        print('')
+        if len(member.dof) == 4:
+            for i in range(len(member.k_matrix)):
+                for j in range(len(member.k_matrix[i])):
+                    row = member.dof[i]
+                    col = member.dof[j]
+                    self.matrix[row-1][col-1] += round(member.ea*member.k_matrix[i][j]/member.l, 5)
+            for row in range(len(member.k_matrix)):
+                print(member.ea*np.asarray(member.k_matrix[row])/member.l, member.dof[row])
+            print('')
+        if len(member.dof) == 6:
+            for i in range(len(member.k_matrix)):
+                for j in range(len(member.k_matrix[i])):
+                    row = member.dof[i]
+                    col = member.dof[j]
+                    self.matrix[row-1][col-1] += round(member.e*member.k_matrix[i][j]/member.l, 5)
+            for row in range(len(member.k_matrix)):
+                print(member.e*np.asarray(member.k_matrix[row])/member.l, member.dof[row])
+            print('')
 
     def solve(self):
         disp_copy = copy.deepcopy(self.displacements)
@@ -80,10 +89,13 @@ class Structure:
         mem_num = 1
         print("Member internal forces (positive is compression, negative is tension)\n")
         for member in self.members:
+            # TODO: Add proper support for the forces inside a beam element with f = k_element * d_element
             if len(member.k_matrix) == 4:
                 du = [disp_copy[member.nx-1], disp_copy[member.ny-1], disp_copy[member.fx-1], disp_copy[member.fy-1]]
                 member_mat = [member.lam_x, member.lam_y, -member.lam_x, -member.lam_y]
                 member_force = round(member.ea/member.l * np.dot(member_mat, du), 5)
+            if len(member.k_matrix) == 6:
+                member_force = 'n/a'
             else:
                 du = [disp_copy[member.nx-1], disp_copy[member.fx-1]]
                 member_force = member.ea / member.l * (du[1] - du[0])
@@ -153,55 +165,61 @@ class Member:
         def __init__(self):
             self.nx = 0
             self.ny = 0
+            self.nz = 0
             self.fx = 0
             self.fy = 0
-            self.ea = 0
+            self.fz = 0
+            self.e = 0
+            self.a = 0
+            self.i = 0
             self.l = 0
             self.lam_x = 0
             self.lam_y = 0
-            self.k_matrix = np.zeros((4, 4))
-            self.dof = [0, 0, 0, 0]
+            self.k_matrix = np.zeros((6, 6))
+            self.dof = [0, 0, 0, 0, 0, 0]
 
-        def define(self, nx, ny, fx, fy, ea, l, lam_x, lam_y):
+        def define(self, nx, ny, nz, fx, fy, fz, e, a, i, l, lam_x, lam_y):
             self.nx = nx
             self.ny = ny
+            self.nz = nz
             self.fx = fx
             self.fy = fy
-            self.ea = ea
+            self.fz = fz
+            self.e = e
+            self.a = a
+            self.i = i
             self.l = l
-            self.dof = [nx, ny, fx, fy]
+            self.lam_x = lam_x
+            self.lam_y = lam_y
+            self.dof = [nx, ny, nz, fx, fy, fz]
             self.k_matrix = \
                 [
-                    [12/self.l**3, 6/self.l**2, -12/self.l**3, -6/self.l**2],
-                    [6/self.l**2, 4/self.l, -6/self.l**2, 2/self.l],
-                    [-12/self.l**3, -6/self.l**2, 12/self.l**3, 6/self.l**2],
-                    [6/self.l**2, 2/self.l, -6/self.l**2, 4/self.l]
+                    [self.a*self.lam_x**2 + 12*self.i/self.l**2*self.lam_y**2, (self.a-12*self.i/self.l**2)*self.lam_x*self.lam_y, -6*self.i/self.l*self.lam_y, -(self.a*self.lam_x**2+12*self.i/self.l**2*self.lam_y**2), -(self.a-12*self.i/self.l**2)*self.lam_x*self.lam_y, -6*self.i/self.l*self.lam_y],
+                    [(self.a-12*self.i/self.l**2)*self.lam_x*self.lam_y, self.a*self.lam_y**2+12*self.i/self.l**2*self.lam_x**2, 6*self.i/self.l*self.lam_x, -(self.a-12*self.i/self.l**2)*self.lam_x*self.lam_y, -(self.a*self.lam_y**2+12*self.i/self.l**2*self.lam_x**2), 6*self.i/self.l*self.lam_x],
+                    [-6*self.i/self.l*self.lam_y, 6*self.i/self.l*self.lam_x, 4*self.i, 6*self.i/self.l*self.lam_y, -6*self.i/self.l*self.lam_x, 2*self.i],
+                    [-(self.a*self.lam_x**2+12*self.i/self.l**2*self.lam_y**2), -(self.a-12*self.i/self.l**2)*self.lam_x*self.lam_y, 6*self.i/self.l*self.lam_y, self.a*self.lam_x**2+12*self.i/self.l**2*self.lam_y**2, (self.a-12*self.i/self.l**2)*self.lam_x*self.lam_y, 6*self.i/self.l*self.lam_y],
+                    [-(self.a-12*self.i/self.l**2)*self.lam_x*self.lam_y, -(self.a*self.lam_y**2+12*self.i/self.l**2*self.lam_x**2), -6*self.i/self.l*self.lam_x, (self.a-12*self.i/self.l**2)*self.lam_x*self.lam_y, self.a*self.lam_y**2+12*self.i/self.l**2*self.lam_x**2, -6*self.i/self.l*self.lam_x],
+                    [-6*self.i/self.l*self.lam_y, 6*self.i/self.l*self.lam_x, 2*self.i, 6*self.i/self.l*self.lam_y, -6*self.i/self.l*self.lam_x, 4*self.i]
                 ]
 
 
-dof = 8
+dof = 12
 structure = Structure(dof)
 
-t1 = Member.Truss()
-t1.define(5, 6, 1, 2, 1 * 1*10**6, 20*12, 1, 0)
-structure.add_member(t1)
-t2 = Member.Truss()
-t2.define(5, 6, 3, 4, 1 * 1*10**6, 300, 0.8, 0.6)
-structure.add_member(t2)
-t3 = Member.Truss()
-t3.define(1, 2, 7, 8, 1 * 1*10**6, 300, -0.8, 0.6)
-structure.add_member(t3)
-t4 = Member.Truss()
-t4.define(1, 2, 3, 4, 1 * 1*10**6, 15*12, 0, 1)
-structure.add_member(t4)
-t5 = Member.Truss()
-t5.define(7, 8, 3, 4, 1 * 1*10**6, 20*12, 1, 0)
-structure.add_member(t5)
-t6 = Member.Truss()
-t6.define(5, 6, 7, 8, 1 * 1*10**6, 15*12, 0, 1)
-structure.add_member(t6)
+b1 = Member.Beam()
+b2 = Member.Beam()
+b3 = Member.Beam()
 
-structure.forces = [0, 1000, 0, 1000, 'f', 'f', 'f', 'f']
-structure.displacements = ['f', 'f', 'f', 'f', 0, 0, 0, 0]
+b1.define(1, 2, 3, 4, 5, 6, 210*10**9, 1*10**-2, 2*10**-4, 3, 1, 0)
+b2.define(4, 5, 6, 7, 8, 9, 210*10**9, 1*10**-2, 2*10**-4, 4.24, 0.707, -0.707)
+b3.define(7, 8, 9, 10, 11, 12, 210*10**9, 1*10**-2, 2*10**-4, 3, 1, 0)
+
+structure.add_member(b1)
+structure.add_member(b2)
+structure.add_member(b3)
+
+structure.forces = ['f', 'f', 'f', 0, -10000, -5000, 0, -10000, 5000, 'f', 'f', 'f']
+structure.displacements = [0, 0, 0, 'f', 'f', 'f', 'f', 'f', 'f', 0, 0, 0]
+
 
 structure.solve()
